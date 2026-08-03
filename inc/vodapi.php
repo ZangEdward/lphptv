@@ -97,13 +97,27 @@ function vod_detail($sourceId, $vodId, $useCache = true) {
     }
     $api = rtrim($src['api'], '/');
     $url = $api . '?ac=videolist&ids=' . rawurlencode($vodId);  // 与 LibreTV 一致（无 &pg）
-    $r = http_get($url, (int)cfg_get('search_timeout', 8));
+    $r = http_get($url, 10);   // 与 LibreTV 详情超时 10000ms 一致
     if ($r['http_code'] != 200 || $r['error']) return ['error' => '请求失败: ' . $r['error']];
     $parsed = parse_vod_response($r['body']);
     if ($parsed['code'] != 1 || empty($parsed['list'])) return ['error' => '未找到详情'];
     $raw = $parsed['list'][0];
     $item = normalize_item($raw, $src['id'], $src['name']);
     $item['play'] = parse_play($raw['vod_play_from'] ?? '', $raw['vod_play_url'] ?? '');
+
+    // LibreTV 兜底：若 vod_play_url 无可用地址，但 vod_content 含裸 .m3u8 直链，则提取
+    // （LibreTV api.js: episodes.length===0 && vod_content → M3U8_PATTERN 正则提取）
+    $hasAny = false;
+    foreach ($item['play'] as $grp) { if (!empty($grp['episodes'])) { $hasAny = true; break; } }
+    if (!$hasAny) {
+        $content = (string)($raw['vod_content'] ?? '');
+        if (preg_match_all('/\$(https?:\/\/[^\'"\s]+?\.m3u8)/', $content, $m)) {
+            $eps = [];
+            foreach ($m[1] as $u) { $eps[] = ['name' => '', 'url' => $u]; }
+            if ($eps) $item['play'] = [['name' => '默认', 'episodes' => $eps]];
+        }
+    }
+
     cache_set($cacheKey, $item, (int)cfg_get('detail_ttl', 7200));
     return $item;
 }
