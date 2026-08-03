@@ -1,10 +1,11 @@
-/* app.js - 前端单页逻辑（搜索 / 聚合结果 / 详情 / 播放 / 收藏）
-   首页展示方法学习 LibreTV：居中渐变标题 + 居中搜索栏 + 最近搜索 + 源筛选胶囊 + 海报卡片网格 */
+/* app.js - 前端单页逻辑（搜索 / 聚合结果 / 详情弹窗 / 播放 / 收藏 / 历史）
+   整体首页展示方法学习 LibreTV：居中渐变标题 + 搜索栏(首页按钮) + 最近搜索 + 源胶囊 + 海报网格 + 详情弹窗 + 历史抽屉 */
 'use strict';
 
 const CONFIG = {};
 let state = { q: '', source: 'all', page: 1, sources: [] };
 const RECENT_KEY = 'lphptv_recent';
+const HIST_KEY = 'lphptv_history';
 
 function proxy(url) {
     return '/proxy.php?u=' + encodeURIComponent(url) + '&t=' + encodeURIComponent(CONFIG.proxy_token || '');
@@ -30,6 +31,7 @@ async function init() {
     state.sources = sres.sources || [];
     renderPills();
     renderRecent();
+    renderHistory();
 
     document.getElementById('search').addEventListener('keydown', e => { if (e.key === 'Enter') submitSearch(); });
 
@@ -76,7 +78,6 @@ function submitSearch() {
 
 let _t;
 function debounceSearch() { clearTimeout(_t); _t = setTimeout(() => doSearch(state.q, state.source, 1), 450); }
-function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 function pushRecent(q) {
     let arr = [];
@@ -103,6 +104,7 @@ function runRecent(q) {
 async function doSearch(q, source, page) {
     state.q = q; state.source = source; state.page = page;
     showView('home');
+    closeDetail();
     const loading = document.getElementById('loading');
     const results = document.getElementById('results');
     loading.style.display = 'block'; results.innerHTML = '';
@@ -142,34 +144,46 @@ function cardHtml(it) {
     </div>`;
 }
 
+/* ---------- 详情弹窗（学习 LibreTV #modal） ---------- */
 async function openDetail(source, id) {
-    showView('detail');
-    const box = document.getElementById('detail');
-    box.innerHTML = '<div class="loading">加载详情…</div>';
+    const m = document.getElementById('modal');
+    const c = document.getElementById('modalContent');
+    c.innerHTML = '<div class="loading">加载详情…</div>';
+    m.classList.add('show');
+    document.body.style.overflow = 'hidden';
     try {
         const d = await api(`api_detail&s=${source}&id=${encodeURIComponent(id)}`);
-        if (d.error) { box.innerHTML = '<div class="empty">' + esc(d.error) + '</div>'; return; }
+        if (d.error) { c.innerHTML = '<div class="empty">' + esc(d.error) + '</div>'; return; }
         renderDetail(d);
         history.replaceState(null, '', `index.php?s=${source}&id=${encodeURIComponent(id)}`);
     } catch (e) {
-        box.innerHTML = '<div class="empty">详情加载失败：' + esc(e.message) + '</div>';
+        c.innerHTML = '<div class="empty">详情加载失败：' + esc(e.message) + '</div>';
     }
+}
+
+function closeDetail() {
+    const m = document.getElementById('modal');
+    if (!m.classList.contains('show')) return;
+    m.classList.remove('show');
+    document.body.style.overflow = '';
+    if (_dp) { try { _dp.destroy(); } catch (e) {} _dp = null; }
 }
 
 function renderDetail(d) {
     window._detailData = d;
-    const box = document.getElementById('detail');
+    const c = document.getElementById('modalContent');
     const play = d.play || [];
-    let tabs = '', episodes = '';
+    let tabs = '';
     if (play.length) {
         tabs = play.map((p, i) => `<button class="tab ${i===0?'active':''}" data-i="${i}" onclick="switchSrc(${i})">${esc(p.name)}</button>`).join('');
     }
-    box.innerHTML = `
+    const meta = [d.type, d.year, d.area].filter(Boolean).map(esc).join(' · ');
+    c.innerHTML = `
       <div class="detail-head">
         <div class="d-poster">${d.pic?`<img src="${esc(d.pic)}" onerror="imgFallback(this)">`:''}</div>
         <div class="d-info">
           <h2>${esc(d.name)} <small>${esc(d.remarks||'')}</small></h2>
-          <p class="line">${esc(d.type)} ${d.year?'· '+esc(d.year):''} ${d.area?'· '+esc(d.area):''}</p>
+          <p class="line">${meta}</p>
           <p class="line">主演：${esc(d.actor)}</p>
           <p class="line">导演：${esc(d.director)}</p>
           <p class="desc">${esc(d.des)}</p>
@@ -179,14 +193,12 @@ function renderDetail(d) {
       <div class="player" id="player"></div>
       <div class="src-tabs" id="srcTabs">${tabs}</div>
       <div class="episodes" id="episodes"></div>
-      <div style="margin-top:16px"><a href="javascript:goHome()" class="btn ghost">← 返回首页</a></div>
     `;
     if (play.length) switchSrc(0);
 }
 
 let _dp = null;
 function switchSrc(i) {
-    const box = document.getElementById('detail');
     const d = window._detailData;
     if (!d) return;
     const src = d.play[i];
@@ -203,6 +215,7 @@ function playEp(i, j) {
     const ep = d.play[i].episodes[j];
     document.querySelectorAll('#episodes .ep').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('#episodes .ep')[j].classList.add('active');
+    pushHistory({ source: d.source, id: d.id, name: d.name, pic: d.pic });
     playUrl(ep.url);
 }
 
@@ -215,6 +228,46 @@ function playUrl(url) {
         video: { url: proxy(url), type: isM3u8(url) ? 'hls' : 'auto' },
         autoplay: true, theme: '#e50914',
     });
+}
+
+/* ---------- 观看历史（localStorage 抽屉） ---------- */
+function pushHistory(item) {
+    let arr = [];
+    try { arr = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) {}
+    arr = arr.filter(x => !(x.source === item.source && x.id === item.id));
+    arr.unshift(item);
+    arr = arr.slice(0, 30);
+    localStorage.setItem(HIST_KEY, JSON.stringify(arr));
+    renderHistory();
+}
+function renderHistory() {
+    const box = document.getElementById('historyList');
+    let arr = [];
+    try { arr = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) {}
+    if (!arr.length) { box.innerHTML = '<div class="empty">暂无观看记录</div>'; return; }
+    box.innerHTML = arr.map((it, idx) => {
+        const pic = it.pic ? `<img src="${esc(it.pic)}" onerror="imgFallback(this)">` : '<div class="no-pic">无</div>';
+        return `<div class="hist-item" onclick="openDetail(${it.source},'${encodeURIComponent(it.id)}')">
+            <div class="hist-pic">${pic}</div>
+            <div class="hist-name">${esc(it.name)}</div>
+            <button class="hist-del" onclick="event.stopPropagation();delHistory(${idx})" aria-label="删除">×</button>
+        </div>`;
+    }).join('');
+}
+function delHistory(idx) {
+    let arr = [];
+    try { arr = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) {}
+    arr.splice(idx, 1);
+    localStorage.setItem(HIST_KEY, JSON.stringify(arr));
+    renderHistory();
+}
+function clearHistory() {
+    if (!confirm('清空全部观看历史？')) return;
+    localStorage.removeItem(HIST_KEY);
+    renderHistory();
+}
+function toggleHistory() {
+    document.getElementById('historyPanel').classList.toggle('show');
 }
 
 async function addFav(source, id, name, pic) {
@@ -240,13 +293,14 @@ async function showFav() {
     } catch (e) { list.innerHTML = '<div class="empty">加载失败</div>'; }
 }
 
-function goHome() { showView('home'); }
+function goHome() { showView('home'); closeDetail(); document.getElementById('search').value = state.q; }
 function showView(id) {
-    ['home', 'detail', 'favView'].forEach(v => document.getElementById(v).style.display = (v === id ? 'block' : 'none'));
+    ['home', 'favView'].forEach(v => document.getElementById(v).style.display = (v === id ? 'block' : 'none'));
     if (id === 'home') window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 window.openDetail = openDetail;
+window.closeDetail = closeDetail;
 window.doSearch = doSearch;
 window.switchSrc = switchSrc;
 window.playEp = playEp;
@@ -258,5 +312,8 @@ window.clearSearch = clearSearch;
 window.submitSearch = submitSearch;
 window.onSearchInput = onSearchInput;
 window.runRecent = runRecent;
+window.toggleHistory = toggleHistory;
+window.clearHistory = clearHistory;
+window.delHistory = delHistory;
 
 init();

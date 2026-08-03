@@ -75,8 +75,32 @@ $site = e(site_name());
 </head>
 <body>
 
+<!-- 顶部按钮：左 历史 / 右 设置(后台) 学习 LibreTV -->
+<div class="corner left">
+  <button onclick="toggleHistory()" aria-label="观看历史" title="观看历史">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 3"></path></svg>
+  </button>
+</div>
+<div class="corner right">
+  <button onclick="location.href='admin.php'" aria-label="后台" title="后台">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+  </button>
+</div>
+
+<!-- 历史抽屉（左滑） -->
+<aside id="historyPanel" class="drawer left-drawer">
+  <div class="drawer-head">
+    <h3 class="gradient-text">观看历史</h3>
+    <button class="x" onclick="toggleHistory()">×</button>
+  </div>
+  <div id="historyList" class="drawer-body"></div>
+  <div class="drawer-foot">
+    <button onclick="clearHistory()" class="btn ghost">清空历史</button>
+  </div>
+</aside>
+
 <header class="topbar">
-  <div class="brand gradient-text" onclick="location.href='index.php'"><?php echo $site; ?></div>
+  <div class="brand gradient-text" onclick="goHome()"><?php echo $site; ?></div>
   <nav class="nav">
     <a href="javascript:goHome()">首页</a>
     <a href="javascript:showFav()">收藏</a>
@@ -93,6 +117,7 @@ $site = e(site_name());
 
     <div class="search-center">
       <div class="search-bar">
+        <button class="home-btn" type="button" onclick="goHome()" title="返回首页">首页</button>
         <input id="search" type="search" placeholder="搜索你喜欢的影视…" autocomplete="off" oninput="onSearchInput(event)">
         <button id="clearBtn" class="clear-btn" type="button" onclick="clearSearch()" aria-label="清空" style="display:none">✕</button>
         <button class="search-btn" type="button" onclick="submitSearch()">搜索</button>
@@ -107,7 +132,6 @@ $site = e(site_name());
     <div id="pager" class="pager"></div>
   </section>
 
-  <section id="detail" class="view" style="display:none"></section>
   <section id="favView" class="view" style="display:none">
     <h2>我的收藏</h2>
     <div id="favList" class="grid"></div>
@@ -120,6 +144,14 @@ $site = e(site_name());
     <p class="disclaimer">免责声明：本站仅为视频搜索工具，不存储、上传或分发任何视频内容。所有视频均来自第三方 API 接口，如有侵权请联系相关内容提供方。请低调自用，勿公开传播。</p>
   </div>
 </footer>
+
+<!-- 详情弹窗（学习 LibreTV 的 #modal） -->
+<div id="modal" class="modal" onclick="if(event.target===this)closeDetail()">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeDetail()" aria-label="关闭">×</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
 
 <script src="<?php echo $cdn; ?>/hls.js@1.5.13/dist/hls.min.js"></script>
 <script src="<?php echo $cdn; ?>/dplayer@1.27.1/dist/DPlayer.min.js"></script>
