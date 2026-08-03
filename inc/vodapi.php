@@ -14,6 +14,20 @@
  */
 
 /**
+ * 判断是否成人内容（学习 LibreTV「黄色内容过滤」：按类型/名称/备注关键词识别）。
+ * 即便源未显式标记 adult，也能在结果层面过滤伦理片/福利/写真等成人视频。
+ */
+function is_adult_item($item) {
+    static $kw = ['伦理','福利','成人','写真','里番','黄片','色情','性爱','情色','激情','禁片',
+                  '限制级','三级','18禁','18+','av','porn','xxx','hentai','adult','sex','里番动漫'];
+    $hay = strtolower(($item['type'] ?? '') . ' ' . ($item['name'] ?? '') . ' ' . ($item['remarks'] ?? ''));
+    foreach ($kw as $k) {
+        if ($k !== '' && strpos($hay, $k) !== false) return true;
+    }
+    return false;
+}
+
+/**
  * 聚合搜索。sourceId='all' 时并发查询所有启用源。
  */
 function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
@@ -29,7 +43,7 @@ function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
     }
     if (!$sources) return ['results' => [], 'sources' => [], 'error' => '没有可用的资源源'];
 
-    $cacheKey = 'search:' . md5($sourceId . '|' . $q . '|' . $page);
+    $cacheKey = 'search:' . md5($sourceId . '|' . $q . '|' . $page . '|' . (cfg_get('show_adult') === '1' ? '1' : '0'));
     if ($useCache) {
         $cached = cache_get($cacheKey);
         if ($cached !== null) return $cached;
@@ -74,6 +88,13 @@ function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
         }
     }
 
+    // 成人开关关闭时，在结果层面过滤成人视频（与 LibreTV 黄色内容过滤一致）
+    if (cfg_get('show_adult') !== '1') {
+        $results = array_values(array_filter($results, function ($it) {
+            return !is_adult_item($it);
+        }));
+    }
+
     // 排序：先按名称、再按来源（与 LibreTV 一致）
     usort($results, function ($a, $b) {
         $c = strcmp($a['name'], $b['name']);
@@ -95,7 +116,7 @@ function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
 function vod_detail($sourceId, $vodId, $useCache = true) {
     $src = source_get((int)$sourceId);
     if (!$src) return ['error' => '源不存在'];
-    $cacheKey = 'detail:' . md5($sourceId . '|' . $vodId);
+    $cacheKey = 'detail:' . md5($sourceId . '|' . $vodId . '|' . (cfg_get('show_adult') === '1' ? '1' : '0'));
     if ($useCache) {
         $cached = cache_get($cacheKey);
         if ($cached !== null) return $cached;
@@ -109,6 +130,11 @@ function vod_detail($sourceId, $vodId, $useCache = true) {
     $raw = $parsed['list'][0];
     $item = normalize_item($raw, $src['id'], $src['name']);
     $item['play'] = parse_play($raw['vod_play_from'] ?? '', $raw['vod_play_url'] ?? '');
+
+    // 成人开关关闭时，整源为成人或单条为成人内容则不允许打开
+    if (cfg_get('show_adult') !== '1' && (!empty($src['adult']) || is_adult_item($item))) {
+        return ['error' => '成人内容已隐藏（后台开启「成人内容」开关后可观看）'];
+    }
 
     // LibreTV 兜底：若 vod_play_url 无可用地址，但 vod_content 含裸 .m3u8 直链，则提取
     // （LibreTV api.js: episodes.length===0 && vod_content → M3U8_PATTERN 正则提取）

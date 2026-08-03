@@ -144,6 +144,18 @@ function parse_sources_txt($text) {
 }
 
 /**
+ * 源名称是否疑似成人（兜底：txt 未标记 is_adult 时，按名称关键词识别）。
+ */
+function source_name_is_adult($name) {
+    static $kw = ['伦理','福利','成人','写真','里番','黄','av','色情','情色','18','禁','性爱','性'];
+    $n = strtolower((string)$name);
+    foreach ($kw as $k) {
+        if ($k !== '' && strpos($n, $k) !== false) return true;
+    }
+    return false;
+}
+
+/**
  * 从内置 jingjian.txt 导入默认源（按 key 合并，不重复）
  * @return int 导入/更新的源数量
  */
@@ -155,8 +167,9 @@ function import_default_sources($txtPath = DEFAULT_SOURCES_TXT) {
     $sort = 0;
     $n = 0;
     foreach ($parsed['sources'] as $s) {
-        // 默认全启用；保留 is_adult 标记
-        source_upsert_by_key($s['key'], $s['name'], $s['api'], 1, $s['is_adult'], $s['detail'], $sort++);
+        // 默认全启用；保留 is_adult 标记（txt 未标记时按名称兜底识别成人源）
+        $adult = $s['is_adult'] || source_name_is_adult($s['name']) ? 1 : 0;
+        source_upsert_by_key($s['key'], $s['name'], $s['api'], 1, $adult, $s['detail'], $sort++);
         $n++;
     }
     return $n;

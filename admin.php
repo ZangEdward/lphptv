@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import_txt'])) {
         $parsed = parse_sources_txt($raw);
         $sort = (int)db()->query('SELECT COALESCE(MAX(sort),0) FROM sources')->fetchColumn();
         foreach ($parsed['sources'] as $s) {
-            $adult = $forceAdult ? 1 : $s['is_adult'];
+            $adult = $forceAdult ? 1 : ($s['is_adult'] || source_name_is_adult($s['name']) ? 1 : 0);
             source_upsert_by_key($s['key'], $s['name'], $s['api'], 1, $adult, $s['detail'], $sort++);
         }
         $n = count($parsed['sources']);
@@ -201,7 +201,7 @@ function admin_html($sources, $st, $edit, $pwMsg, $importMsg = null, $restoredMs
     <h2>资源管理（苹果CMS V10 接口）</h2>
     <div class="adultbar">成人内容（🔞）前台显示：
       <a href="?act=toggle_adult" class="switch '.($showAdult?'on':'off').'">'.($showAdult?'开':'关').'</a>
-      <span class="hint">一键开关：关闭后前台搜索/选源均不含成人源（源仍在后台，可单独管理）</span>
+      <span class="hint">一键开关：关闭后前台搜索/选源自动过滤成人源与成人视频（伦理/福利/写真等），开启后正常展示</span>
       '.($adultMsg?'<span class="msg">'.e($adultMsg).'</span>':'').'
     </div>
     <div class="card"><form method="post">
