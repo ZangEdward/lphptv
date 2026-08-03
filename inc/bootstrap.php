@@ -12,6 +12,10 @@ define('DB_FILE', DATA_DIR . '/app.db');
 require_once INC . '/db.php';
 require_once INC . '/util.php';
 require_once INC . '/vodapi.php';
+require_once INC . '/sources_txt.php';
+
+// 首次进入且源表为空时，自动灌入内置默认源（jingjian.txt，DecoTV 格式）
+ensure_default_sources();
 
 // 站点基本信息
 function site_name() { return cfg_get('site_name', 'PHP 影视聚合'); }

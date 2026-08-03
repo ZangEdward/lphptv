@@ -46,6 +46,20 @@ function init_db($pdo) {
         data TEXT,
         added INTEGER
     )");
+    // 兼容老库：补列（src_key=DecoTV 源 key；detail=详情接口）
+    add_column_if_missing($pdo, 'sources', 'src_key', 'TEXT');
+    add_column_if_missing($pdo, 'sources', 'detail', "TEXT DEFAULT ''");
+}
+
+/**
+ * 安全地为已存在的表补一列（SQLite 不支持 ADD COLUMN IF NOT EXISTS）
+ */
+function add_column_if_missing($pdo, $table, $col, $def) {
+    $cols = $pdo->query("PRAGMA table_info($table)")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($cols as $c) {
+        if ($c['name'] === $col) return;
+    }
+    $pdo->exec("ALTER TABLE $table ADD COLUMN $col $def");
 }
 
 function cfg_get($k, $default = null) {
@@ -96,12 +110,49 @@ function source_add($name, $api, $enabled = 1, $adult = 0, $sort = 0) {
 function source_update($id, $fields) {
     $pdo = db();
     $sets = []; $vals = [];
-    foreach (['name','api','enabled','adult','sort'] as $f) {
+    foreach (['name','api','enabled','adult','sort','src_key','detail'] as $f) {
         if (array_key_exists($f, $fields)) { $sets[] = "$f=?"; $vals[] = $fields[$f]; }
     }
     if (!$sets) return;
     $vals[] = $id;
     $pdo->prepare('UPDATE sources SET ' . implode(',', $sets) . ' WHERE id=?')->execute($vals);
+}
+
+/**
+ * 按 DecoTV 源 key 写入：已存在则更新（name/api/enabled/adult/detail），否则插入。
+ * 无 key 时用 api 主机名兜底，避免同一接口重复入库。
+ */
+function source_upsert_by_key($key, $name, $api, $enabled = 1, $adult = 0, $detail = '', $sort = 0) {
+    $pdo = db();
+    $key = (string)$key;
+    $api = (string)$api;
+    if ($key === '') {
+        $key = src_key_from_api($api);
+    }
+    $st = $pdo->prepare('SELECT id FROM sources WHERE src_key=?');
+    $st->execute([$key]);
+    $row = $st->fetch();
+    if ($row) {
+        source_update($row['id'], [
+            'name'    => $name,
+            'api'     => $api,
+            'enabled' => $enabled,
+            'adult'   => $adult,
+            'detail'  => $detail,
+        ]);
+        return $row['id'];
+    }
+    $pdo->prepare('INSERT INTO sources(name,api,enabled,adult,sort,src_key,detail) VALUES(?,?,?,?,?,?,?)')
+        ->execute([$name, $api, $enabled, $adult, (int)$sort, $key, $detail]);
+    return $pdo->lastInsertId();
+}
+
+/**
+ * 从接口地址提取主机名作为源 key（与 DecoTV 用对象 key 对齐）
+ */
+function src_key_from_api($api) {
+    $h = parse_url((string)$api, PHP_URL_HOST);
+    return $h ?: md5((string)$api);
 }
 
 function source_delete($id) {

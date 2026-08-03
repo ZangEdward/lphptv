@@ -1,0 +1,7 @@
+# 禁止通过 Web 直接访问源订阅文件（仅允许 PHP 后端 include/读取）
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Deny from all
+</IfModule>

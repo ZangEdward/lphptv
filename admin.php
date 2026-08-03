@@ -27,14 +27,45 @@ if (!is_admin()) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_source'])) {
     $name = trim($_POST['name'] ?? '');
     $api = trim($_POST['api'] ?? '');
+    $detail = trim($_POST['detail'] ?? '');
     $enabled = !empty($_POST['enabled']) ? 1 : 0;
     $adult = !empty($_POST['adult']) ? 1 : 0;
     $id = (int)($_POST['id'] ?? 0);
     if ($name && $api) {
-        if ($id) source_update($id, compact('name','api','enabled','adult'));
-        else source_add($name, $api, $enabled, $adult);
+        if ($id) {
+            source_update($id, compact('name','api','detail','enabled','adult'));
+        } else {
+            source_upsert_by_key(src_key_from_api($api), $name, $api, $enabled, $adult, $detail);
+        }
     }
     header('Location: admin.php'); exit;
+}
+
+// 恢复内置默认源（DecoTV 格式 jingjian.txt）
+if (($_GET['act'] ?? '') === 'restore_default') {
+    $n = import_default_sources();
+    header('Location: admin.php?restored=' . (int)$n); exit;
+}
+
+// 导入 txt 源（DecoTV 格式：Base58 或已解码 JSON）
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import_txt'])) {
+    $raw = '';
+    if (!empty($_FILES['txt_file']['tmp_name']) && is_uploaded_file($_FILES['txt_file']['tmp_name'])) {
+        $raw = (string)@file_get_contents($_FILES['txt_file']['tmp_name']);
+    }
+    if ($raw === '' && isset($_POST['txt_text'])) {
+        $raw = (string)$_POST['txt_text'];
+    }
+    if ($raw !== '') {
+        $parsed = parse_sources_txt($raw);
+        $sort = (int)db()->query('SELECT COALESCE(MAX(sort),0) FROM sources')->fetchColumn();
+        foreach ($parsed['sources'] as $s) {
+            source_upsert_by_key($s['key'], $s['name'], $s['api'], 1, $s['is_adult'], $s['detail'], $sort++);
+        }
+        $importMsg = '已导入/更新 ' . count($parsed['sources']) . ' 个源（按 key 合并，不重复）';
+    } else {
+        $importMsg = '没有收到内容';
+    }
 }
 
 if (($_GET['act'] ?? '') === 'delete' && isset($_GET['id'])) { source_delete((int)$_GET['id']); header('Location: admin.php'); exit; }
@@ -67,7 +98,13 @@ if (($_GET['act'] ?? '') === 'edit' && isset($_GET['id'])) $edit = source_get((i
 $sources = sources_all(false);
 $st = cfg_get_all();
 
-echo admin_html($sources, $st, $edit ?? null, $pwMsg ?? '');
+$restoredMsg = null;
+if (isset($_GET['restored'])) {
+    $n = (int)$_GET['restored'];
+    $restoredMsg = $n > 0 ? "已恢复内置默认源，共 {$n} 个" : '内置默认源文件缺失';
+}
+
+echo admin_html($sources, $st, $edit ?? null, $pwMsg ?? '', $importMsg ?? null, $restoredMsg);
 
 /* ---------------- 视图 ---------------- */
 function login_html($err) {
@@ -82,11 +119,11 @@ function login_html($err) {
     <p style="margin-top:14px;font-size:12px;color:#9aa0aa"><a href="index.php" style="color:#9aa0aa">← 返回首页</a></p></div></body></html>';
 }
 
-function admin_html($sources, $st, $edit, $pwMsg) {
+function admin_html($sources, $st, $edit, $pwMsg, $importMsg = null, $restoredMsg = null) {
     $rows = '';
     foreach ($sources as $s) {
         $rows .= '<tr>
-          <td>'.e($s['id']).'</td><td>'.e($s['name']).'</td><td class="api">'.e($s['api']).'</td>
+          <td>'.e($s['id']).'</td><td>'.e($s['name']).($s['src_key']?' <span class="k" title="key">'.e($s['src_key']).'</span>':'').'</td><td class="api">'.e($s['api']).'</td>
           <td>'.($s['enabled']?'<span class="on">启用</span>':'<span class="off">停用</span>').'</td>
           <td>'.($s['adult']?'成人':'-').'</td>
           <td class="acts">
@@ -99,6 +136,7 @@ function admin_html($sources, $st, $edit, $pwMsg) {
 
     $eName = $edit ? e($edit['name']) : '';
     $eApi = $edit ? e($edit['api']) : '';
+    $eDetail = $edit ? e($edit['detail'] ?? '') : '';
     $eId = $edit ? (int)$edit['id'] : 0;
     $eEn = $edit && $edit['enabled'] ? 'checked' : (!$edit ? 'checked' : '');
     $eAd = $edit && $edit['adult'] ? 'checked' : '';
@@ -114,6 +152,8 @@ function admin_html($sources, $st, $edit, $pwMsg) {
     th,td{padding:10px 12px;text-align:left;font-size:13px;border-bottom:1px solid #222}
     th{background:#1f232c;color:#9aa0aa}.api{word-break:break-all;color:#9aa0aa}.acts a{margin-right:10px;color:#5aa9ff}
     .on{color:#3ec46d}.off{color:#888}.empty{color:#888;text-align:center}
+    .k{display:inline-block;margin-left:6px;font-size:11px;color:#6b7280;background:#1f232c;padding:1px 6px;border-radius:4px;vertical-align:middle}
+    textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
     .card{background:#171a21;padding:18px;border-radius:10px;margin-bottom:16px}
     label{display:inline-block;width:120px;font-size:13px;color:#cfd3da}
     input[type=text],input[type=number],input[type=password]{padding:8px 10px;border-radius:6px;border:1px solid #2a2f3a;background:#1f232c;color:#fff;width:360px;max-width:100%}
@@ -130,12 +170,29 @@ function admin_html($sources, $st, $edit, $pwMsg) {
       <input type="hidden" name="id" value="'.$eId.'">
       <div><label>名称</label><input type="text" name="name" value="'.$eName.'" required placeholder="如：演示源A"></div>
       <div style="margin-top:10px"><label>接口地址</label><input type="text" name="api" value="'.$eApi.'" required placeholder="https://域名/api.php/provide/vod"></div>
+      <div style="margin-top:10px"><label>详情接口(可选)</label><input type="text" name="detail" value="'.$eDetail.'" placeholder="留空则用接口地址取详情"></div>
       <div style="margin-top:10px"><label>启用</label><input type="checkbox" name="enabled" '.$eEn.'></div>
       <div style="margin-top:8px"><label>成人内容</label><input type="checkbox" name="adult" '.$eAd.'></div>
       <button>'.($edit?'保存修改':'添加源').'</button>
       '.($edit?'<a href="admin.php" style="color:#9aa0aa;margin-left:12px">取消</a>':'').'
     </form></div>
     <table><tr><th>ID</th><th>名称</th><th>接口地址</th><th>状态</th><th>类型</th><th>操作</th></tr>'.$rows.'</table>
+
+    <h2>导入 txt 源（DecoTV 格式）</h2>
+    <div class="card"><form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="import_txt" value="1">
+      <div style="font-size:13px;color:#cfd3da;line-height:1.6">支持 DecoTV / LunaTV 配置订阅的 Base58 .txt，也支持已解码的 JSON。解析后按源 key 合并，已存在的同名 key 会更新而不会重复。<br>格式：<code style="color:#9aa0aa">{"api_site":{"key":{"name":"...","api":"https://.../api.php/provide/vod","detail?":"...","is_adult?":false}}}</code></div>
+      <div style="margin-top:12px"><label style="width:auto;display:block">粘贴 txt / JSON</label>
+        <textarea name="txt_text" rows="6" placeholder="在此粘贴 DecoTV 订阅 .txt 内容，或已解码的 JSON"></textarea></div>
+      <div style="margin-top:10px"><label style="width:auto;display:block">或上传 .txt 文件</label>
+        <input type="file" name="txt_file" accept=".txt,application/json,text/plain"></div>
+      <div style="margin-top:14px">
+        <button>导入</button>
+        <a href="?act=restore_default" style="color:#5aa9ff;margin-left:16px" onclick="return confirm(\'恢复内置 jingjian.txt 默认源？同名 key 会更新，不会重复\')">恢复内置默认源</a>
+        '.($importMsg?'<span class="msg">'.e($importMsg).'</span>':'').'
+        '.($restoredMsg?'<span class="msg">'.e($restoredMsg).'</span>':'').'
+      </div>
+    </form></div>
 
     <h2>系统设置</h2>
     <div class="card"><form method="post">

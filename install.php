@@ -4,6 +4,7 @@
  */
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/util.php';
+require_once __DIR__ . '/inc/sources_txt.php';
 
 if (is_installed()) {
     header('Location: index.php');
@@ -27,6 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         cfg_set('search_timeout', '8');
         cfg_set('cache_ttl', '1800');
         cfg_set('detail_ttl', '7200');
+        // 灌入内置默认源（DecoTV 格式 jingjian.txt）
+        import_default_sources();
+        cfg_set('seeded_default', '1');
         header('Location: admin.php');
         exit;
     }
@@ -64,7 +68,7 @@ button{margin-top:22px;width:100%;padding:12px;border:none;border-radius:8px;bac
     <input name="password2" type="password" required>
     <button type="submit">安装并进入后台</button>
   </form>
-  <div class="note">安装后请到「后台 → 资源管理」添加你的<strong>资源接口</strong>（苹果CMS V10 格式，例如 <code>https://你的源域名/api.php/provide/vod</code>）。</div>
+  <div class="note">安装后将自动灌入内置默认源（<code>sources/jingjian.txt</code>，与 DecoTV 同源的 Base58 格式）。<br>也可在「后台 → 导入 txt 源」直接粘贴 DecoTV 配置订阅的 .txt，或「恢复内置默认源」。</div>
 </div>
 </body>
 </html>

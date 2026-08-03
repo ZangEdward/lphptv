@@ -32,6 +32,7 @@
 | --- | --- | --- |
 | **LibreSpark/LibreTV** | https://github.com/LibreSpark/LibreTV | 聚合搜索的产品形态（并发请求、超时控制、来源徽章）、m3u8 提取正则、DPlayer + HLS.js 播放链路；**采集 / 获取视频数据的流程**（搜索与详情 URL、请求头、去重、排序、播放地址解析、m3u8 兜底）已逐条对齐，见 §2.1。HLS 代理仅作思路参考——LPHPTV 用自带增强版（`proxy.php` 带 SSRF 防护），见 §2.1 末尾 |
 | **maccmspro/maccms10**（苹果CMS V10） | https://github.com/maccmspro/maccms10 | V10 资源接口标准（`ac=videolist&wd=` 搜索 / `&ids=` 详情）、`vod_play_from` / `vod_play_url` 的多源、分集（`#` 分集、`$` 分隔"集名$地址"）解析格式、XML/JSON 双格式兼容 |
+| **ZangEdward/DecoTV** | https://github.com/ZangEdward/DecoTV | **源订阅 `.txt` 格式**：Base58（比特币字母表）编码 JSON，结构 `{ api_site: { key: { name, api, detail?, is_adult? } } }`。LPHPTV 的 `inc/sources_txt.php` 采用**完全一致**的解析逻辑（Base58 解码 → JSON → `api_site`），后台「导入 txt 源」与「内置默认源 jingjian.txt」均复用此格式 |
 
 > 本项目**未直接拷贝**上述仓库代码（它们分别是 Node/JS 与完整 CMS），而是按它们的接口与交互标准用纯 PHP 重写了一遍后端，前端为自研单页。所有视频数据均来自你配置的第三方资源接口。
 
@@ -102,6 +103,45 @@ https://你的源域名/api.php/provide/vod
 
 返回 JSON（或旧版 XML）即可被解析。绝大多数中文影视资源站、以及你手里的采集源都是这个格式。
 **在你给出的采集源里，挑出这种「接口基地址」填进后台即可。**
+
+### 5.1 一键导入「订阅 txt」（与 DecoTV 同源格式）
+
+后台「**导入 txt 源**」支持直接粘贴或上传 **DecoTV / LunaTV 配置订阅** 的 `.txt`，无需手动拆接口地址。
+
+该 `.txt` 的编码与 `DecoTV` 完全一致（`src/app/api/admin/config_subscription/fetch/route.ts`）：
+
+1. `.txt` 内容是 **Base58（比特币字母表）** 编码的 JSON 串；
+2. Base58 解码后得到 JSON：
+
+```json
+{
+  "api_site": {
+    "iqiyizyapi.com": {
+      "name": "🎬-爱奇艺-",
+      "api": "https://iqiyizyapi.com/api.php/provide/vod",
+      "detail": "https://iqiyizyapi.com",
+      "is_adult": false
+    }
+  },
+  "custom_category": [],
+  "lives": {}
+}
+```
+
+- `api_site` 为对象，键即「源 key」；每条含 `name` / `api`（必填）/ `detail`（可选）/ `is_adult`（可选）。
+- 也兼容**直接粘贴已解码的 JSON 文本**（程序自动探测，Base58 失败则按 JSON 解析）。
+- 导入时按「源 key」合并：已存在的同名 key 会**更新**而不会重复；手动添加的源以接口主机名作为 key 兜底去重。
+
+### 5.2 内置默认源（jingjian.txt）
+
+项目自带 `sources/jingjian.txt`（即你的 LunaTV / DecoTV 订阅源，Base58 编码，含 49 个 V10 源）：
+
+- **全新安装**时，`install.php` 会自动把它灌入源表；
+- **已有站点首次进入后台**也会自动补入（仅一次、且源表为空时）；
+- 任何时候都可在后台点「**恢复内置默认源**」重新灌入 / 更新。
+- `sources/` 目录已用 `.htaccess` 禁止 Web 直接访问，仅 PHP 后端可读取。
+
+> 注意：LPHPTV 用 `api` 同时承担「搜索」与「详情」请求（标准 V10 提供接口），`detail` 字段仅作记录保留、不直接用于取详情，以保证各类源的详情链路稳定。
 
 ---
 
