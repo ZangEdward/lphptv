@@ -29,7 +29,7 @@ if ($r === 'api_detail') {
 }
 
 if ($r === 'sources') {
-    $list = array_map(function($x) { return ['id' => $x['id'], 'name' => $x['name']]; }, sources_all(true));
+    $list = array_map(function($x) { return ['id' => $x['id'], 'name' => $x['name']]; }, frontend_sources());
     json_out(['sources' => $list]);
 }
 

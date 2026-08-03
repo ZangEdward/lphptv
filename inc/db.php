@@ -93,6 +93,20 @@ function sources_all($enabledOnly = false) {
     return $pdo->query($sql)->fetchAll();
 }
 
+/**
+ * 前台可见源：启用状态 + 成人开关。
+ * show_adult != '1' 时过滤掉成人源（一键开关成人资源）。
+ */
+function frontend_sources() {
+    $srcs = sources_all(true);
+    if (cfg_get('show_adult') !== '1') {
+        $srcs = array_values(array_filter($srcs, function ($s) {
+            return empty($s['adult']);
+        }));
+    }
+    return $srcs;
+}
+
 function source_get($id) {
     $pdo = db();
     $st = $pdo->prepare('SELECT * FROM sources WHERE id=?');

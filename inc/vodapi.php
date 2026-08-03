@@ -17,10 +17,15 @@
  * 聚合搜索。sourceId='all' 时并发查询所有启用源。
  */
 function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
-    $sources = sources_all(true);
+    $sources = frontend_sources();
     if ($sourceId !== 'all') {
         $src = source_get((int)$sourceId);
-        $sources = $src ? [$src] : [];
+        // 成人开关关闭且指定源为成人源时，不返回（防止直链绕过下拉）
+        if ($src && (cfg_get('show_adult') === '1' || empty($src['adult']))) {
+            $sources = [$src];
+        } else {
+            $sources = [];
+        }
     }
     if (!$sources) return ['results' => [], 'sources' => [], 'error' => '没有可用的资源源'];
 

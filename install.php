@@ -28,9 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         cfg_set('search_timeout', '8');
         cfg_set('cache_ttl', '1800');
         cfg_set('detail_ttl', '7200');
-        // 灌入内置默认源（DecoTV 格式 jingjian.txt）
-        import_default_sources();
-        cfg_set('seeded_default', '1');
+        // 资源管理默认空：内置 jingjian.txt 不自动灌入，用户在后台按需「导入 txt 源」/「恢复内置默认源」
         header('Location: admin.php');
         exit;
     }
@@ -68,7 +66,7 @@ button{margin-top:22px;width:100%;padding:12px;border:none;border-radius:8px;bac
     <input name="password2" type="password" required>
     <button type="submit">安装并进入后台</button>
   </form>
-  <div class="note">安装后将自动灌入内置默认源（<code>sources/jingjian.txt</code>，与 DecoTV 同源的 Base58 格式）。<br>也可在「后台 → 导入 txt 源」直接粘贴 DecoTV 配置订阅的 .txt，或「恢复内置默认源」。</div>
+  <div class="note">安装后资源管理默认<span style="color:#e50914">为空</span>。<br>在「后台 → 导入 txt 源」粘贴/上传 DecoTV 配置订阅的 .txt（支持 Base58 或已解码 JSON），或直接贴 <code>jingjian.txt</code> 链接；也可点「恢复内置默认源」一键载入内置的 <code>sources/jingjian.txt</code>。</div>
 </div>
 </body>
 </html>

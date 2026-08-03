@@ -47,25 +47,48 @@ if (($_GET['act'] ?? '') === 'restore_default') {
     header('Location: admin.php?restored=' . (int)$n); exit;
 }
 
-// 导入 txt 源（DecoTV 格式：Base58 或已解码 JSON）
+// 导入 txt 源（DecoTV 格式：Base58 或已解码 JSON），支持 链接 / 上传 / 粘贴
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import_txt'])) {
     $raw = '';
-    if (!empty($_FILES['txt_file']['tmp_name']) && is_uploaded_file($_FILES['txt_file']['tmp_name'])) {
-        $raw = (string)@file_get_contents($_FILES['txt_file']['tmp_name']);
+    $srcLabel = '';
+    // 1) 优先用订阅链接抓取
+    $url = trim((string)($_POST['txt_url'] ?? ''));
+    if ($url !== '') {
+        $got = fetch_url_text($url);
+        if ($got !== false && $got !== '') { $raw = $got; $srcLabel = '链接'; }
+        else { $importMsg = '链接抓取失败（检查 URL 是否正确、服务器是否允许出网）'; }
     }
+    // 2) 上传文件
+    if ($raw === '' && !empty($_FILES['txt_file']['tmp_name']) && is_uploaded_file($_FILES['txt_file']['tmp_name'])) {
+        $raw = (string)@file_get_contents($_FILES['txt_file']['tmp_name']);
+        $srcLabel = '文件';
+    }
+    // 3) 直接粘贴
     if ($raw === '' && isset($_POST['txt_text'])) {
         $raw = (string)$_POST['txt_text'];
+        $srcLabel = '粘贴';
     }
-    if ($raw !== '') {
+    $forceAdult = !empty($_POST['adult_all']) ? 1 : 0;
+    if ($raw !== '' && !isset($importMsg)) {
         $parsed = parse_sources_txt($raw);
         $sort = (int)db()->query('SELECT COALESCE(MAX(sort),0) FROM sources')->fetchColumn();
         foreach ($parsed['sources'] as $s) {
-            source_upsert_by_key($s['key'], $s['name'], $s['api'], 1, $s['is_adult'], $s['detail'], $sort++);
+            $adult = $forceAdult ? 1 : $s['is_adult'];
+            source_upsert_by_key($s['key'], $s['name'], $s['api'], 1, $adult, $s['detail'], $sort++);
         }
-        $importMsg = '已导入/更新 ' . count($parsed['sources']) . ' 个源（按 key 合并，不重复）';
-    } else {
+        $n = count($parsed['sources']);
+        $importMsg = ($srcLabel ? "[$srcLabel] " : '') . "已导入/更新 $n 个源（按 key 合并，不重复）" . ($forceAdult ? '，已标记为成人资源 🔞' : '');
+    } elseif (!isset($importMsg)) {
         $importMsg = '没有收到内容';
     }
+}
+
+// 一键开关成人资源（前台可见性）
+if (($_GET['act'] ?? '') === 'toggle_adult') {
+    $cur = cfg_get('show_adult') === '1' ? '1' : '0';
+    cfg_set('show_adult', $cur === '1' ? '0' : '1');
+    header('Location: admin.php?adult=' . cfg_get('show_adult'));
+    exit;
 }
 
 if (($_GET['act'] ?? '') === 'delete' && isset($_GET['id'])) { source_delete((int)$_GET['id']); header('Location: admin.php'); exit; }
@@ -104,7 +127,12 @@ if (isset($_GET['restored'])) {
     $restoredMsg = $n > 0 ? "已恢复内置默认源，共 {$n} 个" : '内置默认源文件缺失';
 }
 
-echo admin_html($sources, $st, $edit ?? null, $pwMsg ?? '', $importMsg ?? null, $restoredMsg);
+$adultMsg = null;
+if (isset($_GET['adult'])) {
+    $adultMsg = $_GET['adult'] === '1' ? '已开启：前台显示成人内容 🔞' : '已关闭：前台隐藏成人内容';
+}
+
+echo admin_html($sources, $st, $edit ?? null, $pwMsg ?? '', $importMsg ?? null, $restoredMsg, $adultMsg);
 
 /* ---------------- 视图 ---------------- */
 function login_html($err) {
@@ -119,7 +147,7 @@ function login_html($err) {
     <p style="margin-top:14px;font-size:12px;color:#9aa0aa"><a href="index.php" style="color:#9aa0aa">← 返回首页</a></p></div></body></html>';
 }
 
-function admin_html($sources, $st, $edit, $pwMsg, $importMsg = null, $restoredMsg = null) {
+function admin_html($sources, $st, $edit, $pwMsg, $importMsg = null, $restoredMsg = null, $adultMsg = null) {
     $rows = '';
     foreach ($sources as $s) {
         $rows .= '<tr>
@@ -159,12 +187,22 @@ function admin_html($sources, $st, $edit, $pwMsg, $importMsg = null, $restoredMs
     input[type=text],input[type=number],input[type=password]{padding:8px 10px;border-radius:6px;border:1px solid #2a2f3a;background:#1f232c;color:#fff;width:360px;max-width:100%}
     button{margin-top:12px;padding:9px 18px;border:none;border-radius:6px;background:#e50914;color:#fff;cursor:pointer}
     .msg{color:#3ec46d;font-size:13px;margin-top:8px}
+    .adultbar{background:#171a21;border:1px solid #2a2f3a;border-left:3px solid #ff6b6b;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+    .adultbar .hint{color:#9aa0aa;font-size:12px}
+    .switch{display:inline-block;min-width:46px;text-align:center;padding:5px 14px;border-radius:20px;font-size:13px;text-decoration:none;font-weight:600}
+    .switch.on{background:#3ec46d;color:#0f1115}
+    .switch.off{background:#2a2f3a;color:#9aa0aa}
     </style></head><body>
     <header><strong>PHP 影视聚合 · 后台</strong>
       <div><a href="index.php">首页</a><a href="?act=logout">退出</a></div></header>
     <div class="wrap">
 
     <h2>资源管理（苹果CMS V10 接口）</h2>
+    <div class="adultbar">成人内容（🔞）前台显示：
+      <a href="?act=toggle_adult" class="switch <?php echo (cfg_get(\'show_adult\')===\'1\'?\'on\':\'off\'); ?>"><?php echo (cfg_get(\'show_adult\')===\'1\'?\'开\':\'关\'); ?></a>
+      <span class="hint">一键开关：关闭后前台搜索/选源均不含成人源（源仍在后台，可单独管理）</span>
+      '.($adultMsg?'<span class="msg">'.e($adultMsg).'</span>':'').'
+    </div>
     <div class="card"><form method="post">
       <input type="hidden" name="save_source" value="1">
       <input type="hidden" name="id" value="'.$eId.'">
@@ -182,10 +220,13 @@ function admin_html($sources, $st, $edit, $pwMsg, $importMsg = null, $restoredMs
     <div class="card"><form method="post" enctype="multipart/form-data">
       <input type="hidden" name="import_txt" value="1">
       <div style="font-size:13px;color:#cfd3da;line-height:1.6">支持 DecoTV / LunaTV 配置订阅的 Base58 .txt，也支持已解码的 JSON。解析后按源 key 合并，已存在的同名 key 会更新而不会重复。<br>格式：<code style="color:#9aa0aa">{"api_site":{"key":{"name":"...","api":"https://.../api.php/provide/vod","detail?":"...","is_adult?":false}}}</code></div>
-      <div style="margin-top:12px"><label style="width:auto;display:block">粘贴 txt / JSON</label>
+      <div style="margin-top:12px"><label style="width:auto;display:block">订阅链接（URL）</label>
+        <input type="text" name="txt_url" placeholder="https://.../jingjian.txt  （直接抓取整份 DecoTV 订阅 txt）" style="width:100%"></div>
+      <div style="margin-top:10px"><label style="width:auto;display:block">或粘贴 txt / JSON</label>
         <textarea name="txt_text" rows="6" placeholder="在此粘贴 DecoTV 订阅 .txt 内容，或已解码的 JSON"></textarea></div>
       <div style="margin-top:10px"><label style="width:auto;display:block">或上传 .txt 文件</label>
         <input type="file" name="txt_file" accept=".txt,application/json,text/plain"></div>
+      <div style="margin-top:10px"><label style="width:auto;display:inline-block;color:#ff9aa2"><input type="checkbox" name="adult_all" style="width:auto;vertical-align:middle"> 🔞 导入为成人资源（强制标记全部为成人）</label></div>
       <div style="margin-top:14px">
         <button>导入</button>
         <a href="?act=restore_default" style="color:#5aa9ff;margin-left:16px" onclick="return confirm(\'恢复内置 jingjian.txt 默认源？同名 key 会更新，不会重复\')">恢复内置默认源</a>

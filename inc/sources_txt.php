@@ -163,13 +163,40 @@ function import_default_sources($txtPath = DEFAULT_SOURCES_TXT) {
 }
 
 /**
- * 站点就绪后保证至少内置默认源一次（仅首次、且源表为空时）
+ * 站点就绪后：默认【不】自动灌源（资源管理默认空）。
+ * 内置 jingjian.txt 仍随项目发布，由用户在后台「恢复内置默认源」或「导入 txt 源」按需加载。
  */
 function ensure_default_sources() {
-    if (!is_installed()) return;
-    if (cfg_get('seeded_default') === '1') return;
-    // 首次就绪：按 key 合并灌入内置默认源（jingjian.txt），
-    // 即便用户已手动添加其它源也不会重复（key 唯一），以满足「默认内置我的 txt」。
-    import_default_sources();
-    cfg_set('seeded_default', '1');
+    // 故意留空：保持资源管理默认空，避免覆盖用户手动添加的源。
+    return;
+}
+
+/**
+ * 抓取远程 txt（订阅链接）。优先 file_get_contents，其次 curl。
+ * 仅允许 http/https，且要求管理端调用（已在 admin.php 鉴权后使用）。
+ * @return string|false 内容或失败
+ */
+function fetch_url_text($url) {
+    $url = trim((string)$url);
+    if ($url === '') return false;
+    $p = parse_url($url);
+    if (!isset($p['scheme']) || !in_array(strtolower($p['scheme']), ['http', 'https'], true)) return false;
+    if (!isset($p['host']) || $p['host'] === '') return false;
+
+    // 1) file_get_contents（需 allow_url_fopen）
+    if (function_exists('file_get_contents')) {
+        $ctx = stream_context_create(['http' => ['timeout' => 20, 'ignore_errors' => true, 'header' => "User-Agent: Mozilla/5.0\r\n"], 'https' => ['timeout' => 20, 'ignore_errors' => true, 'header' => "User-Agent: Mozilla/5.0\r\n"]]);
+        $c = @file_get_contents($url, false, $ctx);
+        if ($c !== false && $c !== '') return $c;
+    }
+    // 2) curl 兜底
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_FOLLOWLOCATION => true, CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => false, CURLOPT_USERAGENT => 'Mozilla/5.0']);
+        $c = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($c !== false && $c !== '' && $code >= 200 && $code < 300) return $c;
+    }
+    return false;
 }
