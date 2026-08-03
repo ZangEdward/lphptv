@@ -153,6 +153,41 @@ function vod_detail($sourceId, $vodId, $useCache = true) {
     return $item;
 }
 
+/**
+ * 自动识别成人源：并发探测每个启用源的「最新列表」，若其返回内容含成人视频（is_adult_item），
+ * 则把该源标记为 adult=1。这样「源」层面开关（frontend_sources）才能真正按源过滤，
+ * 而不只依赖结果层面关键词过滤。返回被标记的源数量。
+ */
+function detect_adult_sources() {
+    $sources = sources_all(true);
+    if (!$sources) return 0;
+    $reqs = []; $map = [];
+    foreach ($sources as $s) {
+        $api = rtrim($s['api'], '/');
+        $reqs['s' . $s['id']] = $api . '?ac=videolist&pg=1';
+        $map['s' . $s['id']] = $s;
+    }
+    $timeout = (int)cfg_get('search_timeout', 8);
+    $resps = multi_get($reqs, $timeout);
+    $marked = 0;
+    foreach ($resps as $key => $r) {
+        $s = $map[$key];
+        if (empty($s) || $s['adult']) continue; // 已标记跳过
+        if ($r['http_code'] != 200 || !empty($r['error'])) continue;
+        $parsed = parse_vod_response($r['body']);
+        if (empty($parsed['list'])) continue;
+        foreach (array_slice($parsed['list'], 0, 30) as $raw) {
+            $it = normalize_item($raw, $s['id'], $s['name']);
+            if ($it && is_adult_item($it)) {
+                source_update($s['id'], ['adult' => 1]);
+                $marked++;
+                break;
+            }
+        }
+    }
+    return $marked;
+}
+
 function normalize_item($raw, $sourceId, $sourceName) {
     if (empty($raw['vod_name'])) return null;
     return [

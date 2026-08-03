@@ -77,7 +77,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import_txt'])) {
             source_upsert_by_key($s['key'], $s['name'], $s['api'], 1, $adult, $s['detail'], $sort++);
         }
         $n = count($parsed['sources']);
-        $importMsg = ($srcLabel ? "[$srcLabel] " : '') . "已导入/更新 $n 个源（按 key 合并，不重复）" . ($forceAdult ? '，已标记为成人资源 🔞' : '');
+        // 导入后自动探测并标记成人源（源层面开关才能真正生效）
+        $detected = detect_adult_sources();
+        $importMsg = ($srcLabel ? "[$srcLabel] " : '') . "已导入/更新 $n 个源（按 key 合并，不重复）"
+            . ($forceAdult ? '，已标记为成人资源 🔞' : ($detected ? "，自动识别 $detected 个成人源 🔞" : ''));
     } elseif (!isset($importMsg)) {
         $importMsg = '没有收到内容';
     }

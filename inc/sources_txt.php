@@ -172,6 +172,10 @@ function import_default_sources($txtPath = DEFAULT_SOURCES_TXT) {
         source_upsert_by_key($s['key'], $s['name'], $s['api'], 1, $adult, $s['detail'], $sort++);
         $n++;
     }
+    // 导入后自动探测并标记成人源（源层面开关才能真正生效）
+    if (function_exists('detect_adult_sources')) {
+        detect_adult_sources();
+    }
     return $n;
 }
 
