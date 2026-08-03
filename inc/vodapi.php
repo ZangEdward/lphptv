@@ -1,10 +1,16 @@
 <?php
 /**
  * vodapi.php - 苹果CMS V10 资源接口客户端
- * 搜索/详情请求格式（与 LibreTV 共用同一标准）：
- *   搜索: {api}?ac=videolist&wd=关键词&pg=页码
- *   详情: {api}?ac=videolist&ids=视频ID
- * 播放地址: vod_play_from = "源1$$$源2"; vod_play_url = "集名$url#集名$url$$$..."
+ * 采集流程完全参照 LibreSpark/LibreTV（js/api.js）：
+ *   - 搜索 URL： {api}?ac=videolist&wd=<encodeURIComponent(q)>&pg=N  （PHP 用 rawurlencode 等价 encodeURIComponent）
+ *   - 详情 URL： {api}?ac=videolist&ids=<id>
+ *   - 请求头：   User-Agent(Chrome) + Accept: application/json
+ *   - 单源超时： 8000ms；多源并发（curl_multi）；单源失败不影响其它源（返回空）
+ *   - 去重：     按「源ID_视频ID」去重（与 LibreTV 一致：不同源的同一影片分别保留，便于切换源）
+ *   - 排序：     先按名称、再按来源（与 LibreTV localeCompare 一致）
+ * 播放地址解析（与 LibreTV 一致）：
+ *   vod_play_from = "源1$$$源2"; vod_play_url = "集名$url#集名$url$$$源2的集..."
+ *   按 $$$ 分组、# 分集、$ 分隔「集名$地址」，返回多源可切换结构。
  */
 
 /**
@@ -24,21 +30,23 @@ function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
         if ($cached !== null) return $cached;
     }
 
+    $qe = rawurlencode($q);          // 等价于 JS encodeURIComponent
+    $pg = (int)$page;
     $reqs = [];
     $srcMap = [];
     foreach ($sources as $s) {
         $api = rtrim($s['api'], '/');
         if ($q === '' || $q === null) {
-            $url = $api . '?ac=videolist&pg=' . (int)$page; // 最新
+            $url = $api . '?ac=videolist&pg=' . $pg; // 最新
         } else {
-            $url = $api . '?ac=videolist&wd=' . urlencode($q) . '&pg=' . (int)$page;
+            $url = $api . '?ac=videolist&wd=' . $qe . '&pg=' . $pg;
         }
         $key = 's' . $s['id'];
         $reqs[$key] = $url;
         $srcMap[$key] = $s;
     }
 
-    $timeout = (int)cfg_get('search_timeout', 8);
+    $timeout = (int)cfg_get('search_timeout', 8);  // 与 LibreTV AGGREGATED_SEARCH_CONFIG.timeout=8000 一致
     $resps = multi_get($reqs, $timeout);
 
     $results = [];
@@ -53,12 +61,23 @@ function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
         foreach ($parsed['list'] as $raw) {
             $item = normalize_item($raw, $s['id'], $s['name']);
             if (!$item) continue;
-            $dk = mb_strtolower(trim($item['name']), 'UTF-8');
-            if (isset($seen[$dk])) continue; // 同名去重，保留首个源
+            // 去重键 = 源 + 视频ID（与 LibreTV 一致：不同源的同一影片分别保留）
+            $dk = $s['id'] . '_' . $item['id'];
+            if (isset($seen[$dk])) continue;
             $seen[$dk] = true;
             $results[] = $item;
         }
     }
+
+    // 排序：先按名称、再按来源（与 LibreTV 一致）
+    usort($results, function ($a, $b) {
+        $c = strcmp($a['name'], $b['name']);
+        return $c !== 0 ? $c : strcmp($a['source_name'], $b['source_name']);
+    });
+
+    // 结果上限：49 源全开时体量很大，给个上限防止响应过大（LibreTV 有 maxResults 同理）
+    $max = (int)cfg_get('max_results', 300);
+    if ($max > 0 && count($results) > $max) $results = array_slice($results, 0, $max);
 
     $out = ['results' => $results, 'sources' => $srcStat, 'error' => ''];
     cache_set($cacheKey, $out, (int)cfg_get('cache_ttl', 1800));
@@ -77,7 +96,7 @@ function vod_detail($sourceId, $vodId, $useCache = true) {
         if ($cached !== null) return $cached;
     }
     $api = rtrim($src['api'], '/');
-    $url = $api . '?ac=videolist&ids=' . urlencode($vodId) . '&pg=1';
+    $url = $api . '?ac=videolist&ids=' . rawurlencode($vodId);  // 与 LibreTV 一致（无 &pg）
     $r = http_get($url, (int)cfg_get('search_timeout', 8));
     if ($r['http_code'] != 200 || $r['error']) return ['error' => '请求失败: ' . $r['error']];
     $parsed = parse_vod_response($r['body']);

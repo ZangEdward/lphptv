@@ -7,9 +7,11 @@ define('UA', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 /**
  * 单条 GET 请求（curl）
+ * 默认带 UA + Accept: application/json，与 LibreTV 的采集请求头一致。
  */
 function http_get($url, $timeout = 8, $headers = []) {
     $ch = curl_init($url);
+    $all = array_merge(['User-Agent: ' . UA, 'Accept: application/json'], $headers);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
@@ -19,7 +21,7 @@ function http_get($url, $timeout = 8, $headers = []) {
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => 0,
         CURLOPT_USERAGENT => UA,
-        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_HTTPHEADER => $all,
         CURLOPT_ENCODING => '',
     ]);
     $body = curl_exec($ch);
@@ -34,10 +36,12 @@ function http_get($url, $timeout = 8, $headers = []) {
  * 并发 GET（curl_multi）—— 用于聚合搜索同时打多个源
  * @param array $items [key => url]
  * @return array key => ['body','http_code','content_type','error']
+ * 默认带 UA + Accept: application/json，与 LibreTV 的采集请求头一致。
  */
-function multi_get(array $items, $timeout = 8) {
+function multi_get(array $items, $timeout = 8, $headers = []) {
     $mh = curl_multi_init();
     $handles = [];
+    $all = array_merge(['User-Agent: ' . UA, 'Accept: application/json'], $headers);
     foreach ($items as $key => $url) {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -49,6 +53,7 @@ function multi_get(array $items, $timeout = 8) {
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => 0,
             CURLOPT_USERAGENT => UA,
+            CURLOPT_HTTPHEADER => $all,
             CURLOPT_ENCODING => '',
         ]);
         curl_multi_add_handle($mh, $ch);
