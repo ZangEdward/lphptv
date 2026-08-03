@@ -1,0 +1,17 @@
+# SQLite 数据库（由安装向导自动生成，含站点配置，勿入库）
+/data/*.db
+/data/*.sqlite
+/data/*.sqlite3
+
+# 运行时缓存（如有）
+*.log
+
+# 操作系统 / 编辑器
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# 本地开发临时文件
+.cache/
+.tmp/
