@@ -148,6 +148,7 @@ function login_html($err) {
 }
 
 function admin_html($sources, $st, $edit, $pwMsg, $importMsg = null, $restoredMsg = null, $adultMsg = null) {
+    $showAdult = cfg_get('show_adult') === '1';
     $rows = '';
     foreach ($sources as $s) {
         $rows .= '<tr>
@@ -199,7 +200,7 @@ function admin_html($sources, $st, $edit, $pwMsg, $importMsg = null, $restoredMs
 
     <h2>资源管理（苹果CMS V10 接口）</h2>
     <div class="adultbar">成人内容（🔞）前台显示：
-      <a href="?act=toggle_adult" class="switch <?php echo (cfg_get(\'show_adult\')===\'1\'?\'on\':\'off\'); ?>"><?php echo (cfg_get(\'show_adult\')===\'1\'?\'开\':\'关\'); ?></a>
+      <a href="?act=toggle_adult" class="switch '.($showAdult?'on':'off').'">'.($showAdult?'开':'关').'</a>
       <span class="hint">一键开关：关闭后前台搜索/选源均不含成人源（源仍在后台，可单独管理）</span>
       '.($adultMsg?'<span class="msg">'.e($adultMsg).'</span>':'').'
     </div>
