@@ -147,7 +147,8 @@ function parse_sources_txt($text) {
  * 源名称是否疑似成人（兜底：txt 未标记 is_adult 时，按名称关键词识别）。
  */
 function source_name_is_adult($name) {
-    static $kw = ['伦理','福利','成人','写真','里番','黄','av','色情','情色','18','禁','性爱','性'];
+    // 含 🔞 标志的源名称直接视为成人源（用户约定：源名带 🔞 即为成人源）
+    static $kw = ['🔞','伦理','福利','成人','写真','里番','黄','av','色情','情色','18','禁','性爱','性'];
     $n = strtolower((string)$name);
     foreach ($kw as $k) {
         if ($k !== '' && strpos($n, $k) !== false) return true;
