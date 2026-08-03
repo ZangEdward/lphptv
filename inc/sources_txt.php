@@ -168,10 +168,8 @@ function import_default_sources($txtPath = DEFAULT_SOURCES_TXT) {
 function ensure_default_sources() {
     if (!is_installed()) return;
     if (cfg_get('seeded_default') === '1') return;
-    $pdo = db();
-    $cnt = (int)$pdo->query('SELECT COUNT(*) FROM sources')->fetchColumn();
-    if ($cnt === 0) {
-        import_default_sources();
-    }
+    // 首次就绪：按 key 合并灌入内置默认源（jingjian.txt），
+    // 即便用户已手动添加其它源也不会重复（key 唯一），以满足「默认内置我的 txt」。
+    import_default_sources();
     cfg_set('seeded_default', '1');
 }
