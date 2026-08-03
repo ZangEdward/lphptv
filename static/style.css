@@ -3,32 +3,61 @@
 body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; }
 a { color:var(--text); text-decoration:none; }
 
-.topbar { display:flex; align-items:center; gap:16px; padding:12px 20px; background:var(--panel); position:sticky; top:0; z-index:10; border-bottom:1px solid #000; }
-.brand { font-size:20px; font-weight:700; color:var(--accent); cursor:pointer; white-space:nowrap; }
-.search-wrap { flex:1; display:flex; gap:8px; max-width:720px; }
-#search { flex:1; padding:10px 14px; border-radius:8px; border:1px solid #2a2f3a; background:var(--panel2); color:var(--text); font-size:15px; }
-#search:focus { outline:none; border-color:var(--accent); }
-#sourceSel { padding:10px; border-radius:8px; border:1px solid #2a2f3a; background:var(--panel2); color:var(--text); }
-.nav { display:flex; gap:14px; font-size:14px; color:var(--muted); }
+/* 渐变文字（学习 LibreTV） */
+.gradient-text {
+    background: linear-gradient(90deg,#ff4d6d 0%,#ff9a3c 35%,#7c5cff 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+}
+
+/* 顶栏 */
+.topbar { display:flex; align-items:center; gap:16px; padding:12px 22px; background:rgba(23,26,33,.85); backdrop-filter:blur(8px); position:sticky; top:0; z-index:10; border-bottom:1px solid #000; }
+.brand { font-size:22px; font-weight:800; cursor:pointer; white-space:nowrap; }
+.nav { margin-left:auto; display:flex; gap:16px; font-size:14px; color:var(--muted); }
 .nav a:hover { color:var(--text); }
 
 main { max-width:1200px; margin:0 auto; padding:20px; }
 .view { min-height:60vh; }
 
-.hero { text-align:center; padding:40px 0 24px; }
-.hero h1 { font-size:28px; margin:0 0 8px; }
-.hero p { color:var(--muted); margin:0; }
+/* 居中 hero（学习 LibreTV） */
+.hero { text-align:center; padding:46px 0 26px; }
+.hero h1 { font-size:44px; font-weight:800; margin:0 0 10px; letter-spacing:1px; }
+.hero p { color:var(--muted); margin:0; font-size:15px; }
 
-.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:16px; }
-.card { cursor:pointer; transition:transform .15s; }
-.card:hover { transform:translateY(-4px); }
-.poster { position:relative; aspect-ratio:2/3; border-radius:8px; overflow:hidden; background:#222; }
-.poster img { width:100%; height:100%; object-fit:cover; display:block; }
-.no-pic { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#555; }
-.badge { position:absolute; left:6px; top:6px; background:rgba(0,0,0,.6); color:#fff; font-size:11px; padding:2px 6px; border-radius:4px; }
-.remark { position:absolute; right:6px; bottom:6px; background:var(--accent); color:#fff; font-size:11px; padding:2px 6px; border-radius:4px; }
-.title { margin-top:6px; font-size:14px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.meta { color:var(--muted); font-size:12px; margin-top:2px; }
+/* 居中搜索栏（圆角胶囊 + 白色搜索按钮） */
+.search-center { max-width:680px; margin:0 auto; }
+.search-bar { display:flex; align-items:stretch; border-radius:999px; overflow:hidden; background:#111; border:1px solid #2a2f3a; box-shadow:0 8px 30px rgba(0,0,0,.35); }
+.search-bar input { flex:1; background:transparent; border:none; color:#fff; padding:15px 22px; font-size:16px; min-width:0; }
+.search-bar input:focus { outline:none; }
+.search-bar .clear-btn { background:transparent; border:none; color:var(--muted); font-size:16px; padding:0 14px; cursor:pointer; display:flex; align-items:center; }
+.search-bar .clear-btn:hover { color:#fff; }
+.search-bar .search-btn { background:#fff; color:#0f1115; border:none; padding:0 30px; font-size:15px; font-weight:700; cursor:pointer; transition:background .15s; }
+.search-bar .search-btn:hover { background:#e9e9e9; }
+
+/* 最近搜索 */
+.recent { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:14px; }
+.chip { background:#171a21; border:1px solid #2a2f3a; color:#cfd3da; padding:6px 14px; border-radius:999px; font-size:13px; cursor:pointer; transition:border-color .15s,color .15s; }
+.chip:hover { border-color:#5a5f6a; color:#fff; }
+
+/* 源筛选胶囊 */
+.pills { display:flex; gap:8px; overflow-x:auto; padding:20px 2px 6px; max-width:100%; scrollbar-width:thin; }
+.pill { flex:0 0 auto; padding:7px 16px; border-radius:999px; background:#171a21; border:1px solid #2a2f3a; color:#cfd3da; cursor:pointer; font-size:13px; white-space:nowrap; transition:all .15s; }
+.pill:hover { border-color:#5a5f6a; color:#fff; }
+.pill.active { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+
+/* 卡片网格（海报卡，学习 LibreTV 网格美学） */
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:16px; margin-top:8px; }
+.card { cursor:pointer; transition:transform .18s ease, box-shadow .18s ease; }
+.card:hover { transform:translateY(-5px); }
+.poster { position:relative; aspect-ratio:2/3; border-radius:10px; overflow:hidden; background:#222; box-shadow:0 4px 14px rgba(0,0,0,.3); }
+.poster img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .4s ease; }
+.card:hover .poster img { transform:scale(1.06); }
+.no-pic { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#555; font-size:13px; }
+.badge { position:absolute; left:6px; top:6px; background:rgba(0,0,0,.55); color:#fff; font-size:11px; padding:2px 7px; border-radius:5px; max-width:70%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.remark { position:absolute; right:6px; bottom:6px; background:var(--accent); color:#fff; font-size:11px; padding:2px 7px; border-radius:5px; }
+.pgrad { position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,.45), transparent 45%); pointer-events:none; }
+.title { margin-top:8px; font-size:14px; line-height:1.35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.meta { color:var(--muted); font-size:12px; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 .loading, .empty { text-align:center; color:var(--muted); padding:40px; }
 .pager { display:flex; gap:14px; justify-content:center; align-items:center; margin:24px 0; }
@@ -44,6 +73,7 @@ main { max-width:1200px; margin:0 auto; padding:20px; }
 .line { color:var(--muted); margin:4px 0; font-size:14px; }
 .desc { margin:10px 0; line-height:1.6; color:#cfd3da; }
 .btn { padding:8px 18px; border-radius:6px; border:none; background:var(--accent); color:#fff; cursor:pointer; font-size:14px; }
+.btn.ghost { background:transparent; border:1px solid #2a2f3a; color:var(--text); }
 
 .player { width:100%; background:#000; border-radius:8px; overflow:hidden; margin-bottom:16px; }
 #dp { width:100%; height:60vh; }
@@ -54,6 +84,14 @@ main { max-width:1200px; margin:0 auto; padding:20px; }
 .ep { padding:8px 6px; border-radius:6px; border:1px solid #2a2f3a; background:var(--panel2); color:var(--text); cursor:pointer; font-size:13px; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ep.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 
-.foot { text-align:center; color:#555; padding:24px; font-size:12px; }
+.foot { border-top:1px solid #1c1f26; background:#0a0b0e; padding:30px 20px; margin-top:30px; }
+.foot-inner { max-width:900px; margin:0 auto; text-align:center; }
+.foot-brand { font-size:18px; font-weight:800; }
+.disclaimer { color:#5a606b; font-size:12px; line-height:1.7; margin:10px 0 0; }
 
-@media (max-width:640px){ .topbar{ flex-wrap:wrap; } .search-wrap{ order:3; max-width:none; flex-basis:100%; } #dp{ height:50vh; } }
+@media (max-width:640px){
+    .hero h1 { font-size:32px; }
+    .topbar { flex-wrap:wrap; }
+    .search-bar .search-btn { padding:0 20px; }
+    #dp { height:50vh; }
+}

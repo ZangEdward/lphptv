@@ -1,8 +1,10 @@
-/* app.js - 前端单页逻辑（搜索 / 聚合结果 / 详情 / 播放 / 收藏） */
+/* app.js - 前端单页逻辑（搜索 / 聚合结果 / 详情 / 播放 / 收藏）
+   首页展示方法学习 LibreTV：居中渐变标题 + 居中搜索栏 + 最近搜索 + 源筛选胶囊 + 海报卡片网格 */
 'use strict';
 
 const CONFIG = {};
 let state = { q: '', source: 'all', page: 1, sources: [] };
+const RECENT_KEY = 'lphptv_recent';
 
 function proxy(url) {
     return '/proxy.php?u=' + encodeURIComponent(url) + '&t=' + encodeURIComponent(CONFIG.proxy_token || '');
@@ -26,23 +28,77 @@ async function init() {
 
     const sres = await api('sources').catch(() => ({ sources: [] }));
     state.sources = sres.sources || [];
-    const sel = document.getElementById('sourceSel');
-    sel.innerHTML = '<option value="all">全部源</option>' +
-        state.sources.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    renderPills();
+    renderRecent();
 
-    document.getElementById('search').addEventListener('input', debounce(onSearchInput, 400));
-    sel.addEventListener('change', () => { state.source = sel.value; doSearch(state.q, state.source, 1); });
+    document.getElementById('search').addEventListener('keydown', e => { if (e.key === 'Enter') submitSearch(); });
 
-    // URL 参数：?q= 预填搜索；?s=&id= 直接详情
     const params = new URLSearchParams(location.search);
     const q = params.get('q');
-    if (q) { document.getElementById('search').value = q; doSearch(q, 'all', 1); }
+    if (q) { document.getElementById('search').value = q; doSearch(q, state.source, 1); }
     else if (params.get('s') && params.get('id')) { openDetail(params.get('s'), params.get('id')); }
-    else { doSearch('', 'all', 1); } // 首页展示最新
+    else { doSearch('', state.source, 1); } // 首页展示最新
 }
 
+function renderPills() {
+    const box = document.getElementById('sourcePills');
+    const pills = [{ id: 'all', name: '全部源' }].concat(state.sources);
+    box.innerHTML = pills.map(s =>
+        `<button class="pill ${s.id === state.source ? 'active' : ''}" data-id="${esc(s.id)}" onclick="pickSource('${esc(s.id)}')">${esc(s.name)}</button>`
+    ).join('');
+}
+
+function pickSource(id) {
+    state.source = id;
+    document.querySelectorAll('#sourcePills .pill').forEach(p => p.classList.toggle('active', p.dataset.id === id));
+    doSearch(state.q, state.source, 1);
+}
+
+function onSearchInput(e) {
+    const v = e.target.value;
+    document.getElementById('clearBtn').style.display = v ? 'flex' : 'none';
+    state.q = v.trim();
+    debounceSearch();
+}
+function clearSearch() {
+    const inp = document.getElementById('search');
+    inp.value = ''; state.q = '';
+    document.getElementById('clearBtn').style.display = 'none';
+    doSearch('', state.source, 1);
+}
+function submitSearch() {
+    const inp = document.getElementById('search');
+    state.q = inp.value.trim();
+    document.getElementById('clearBtn').style.display = inp.value ? 'flex' : 'none';
+    if (state.q) pushRecent(state.q);
+    doSearch(state.q, state.source, 1);
+}
+
+let _t;
+function debounceSearch() { clearTimeout(_t); _t = setTimeout(() => doSearch(state.q, state.source, 1), 450); }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
-function onSearchInput(e) { state.q = e.target.value.trim(); doSearch(state.q, state.source, 1); }
+
+function pushRecent(q) {
+    let arr = [];
+    try { arr = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) {}
+    arr = arr.filter(x => x !== q);
+    arr.unshift(q);
+    arr = arr.slice(0, 8);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(arr));
+    renderRecent();
+}
+function renderRecent() {
+    const box = document.getElementById('recent');
+    let arr = [];
+    try { arr = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) {}
+    if (!arr.length) { box.innerHTML = ''; return; }
+    box.innerHTML = arr.map(q => `<span class="chip" onclick="runRecent('${esc(q)}')">${esc(q)}</span>`).join('');
+}
+function runRecent(q) {
+    document.getElementById('search').value = q; state.q = q;
+    document.getElementById('clearBtn').style.display = 'flex';
+    doSearch(q, state.source, 1);
+}
 
 async function doSearch(q, source, page) {
     state.q = q; state.source = source; state.page = page;
@@ -70,11 +126,19 @@ async function doSearch(q, source, page) {
 }
 
 function cardHtml(it) {
-    const pic = it.pic ? `<img loading="lazy" src="${esc(it.pic)}" onerror="imgFallback(this)">` : '<div class="no-pic">无图</div>';
-    return `<div class="card" onclick="openDetail(${it.source},'${encodeURIComponent(it.id)}')">
-        <div class="poster">${pic}<span class="badge">${esc(it.source_name)}</span>${it.remarks?`<span class="remark">${esc(it.remarks)}</span>`:''}</div>
-        <div class="title">${esc(it.name)}</div>
-        <div class="meta">${esc(it.type)}${it.year?' · '+esc(it.year):''}${it.area?' · '+esc(it.area):''}</div>
+    const safeId = encodeURIComponent(it.id);
+    const safeName = esc(it.name);
+    const sourceInfo = it.source_name
+        ? `<span class="badge">${esc(it.source_name)}</span>` : '';
+    const remark = it.remarks ? `<span class="remark">${esc(it.remarks)}</span>` : '';
+    const pic = it.pic
+        ? `<img loading="lazy" src="${esc(it.pic)}" alt="${safeName}" onerror="imgFallback(this)">`
+        : '<div class="no-pic">无封面</div>';
+    const meta = [it.type, it.year, it.area].filter(Boolean).map(esc).join(' · ');
+    return `<div class="card" onclick="openDetail(${it.source},'${safeId}')">
+        <div class="poster">${pic}${sourceInfo}${remark}<div class="pgrad"></div></div>
+        <div class="title">${safeName}</div>
+        ${meta ? `<div class="meta">${meta}</div>` : ''}
     </div>`;
 }
 
@@ -115,6 +179,7 @@ function renderDetail(d) {
       <div class="player" id="player"></div>
       <div class="src-tabs" id="srcTabs">${tabs}</div>
       <div class="episodes" id="episodes"></div>
+      <div style="margin-top:16px"><a href="javascript:goHome()" class="btn ghost">← 返回首页</a></div>
     `;
     if (play.length) switchSrc(0);
 }
@@ -169,14 +234,16 @@ async function showFav() {
         const items = data.list || [];
         if (!items.length) { list.innerHTML = '<div class="empty">还没有收藏</div>'; return; }
         list.innerHTML = items.map(it => `<div class="card" onclick="openDetail(${it.source},'${encodeURIComponent(it.vod_id)}')">
-            <div class="poster">${it.pic?`<img src="${esc(it.pic)}" onerror="imgFallback(this)">`:'<div class="no-pic">无图</div>'}<span class="badge">${esc(it.source)}</span></div>
+            <div class="poster">${it.pic?`<img src="${esc(it.pic)}" onerror="imgFallback(this)">`:'<div class="no-pic">无图</div>'}<span class="badge">${esc(it.source)}</span><div class="pgrad"></div></div>
             <div class="title">${esc(it.name)}</div>
         </div>`).join('');
     } catch (e) { list.innerHTML = '<div class="empty">加载失败</div>'; }
 }
 
+function goHome() { showView('home'); }
 function showView(id) {
     ['home', 'detail', 'favView'].forEach(v => document.getElementById(v).style.display = (v === id ? 'block' : 'none'));
+    if (id === 'home') window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 window.openDetail = openDetail;
@@ -185,5 +252,11 @@ window.switchSrc = switchSrc;
 window.playEp = playEp;
 window.addFav = addFav;
 window.showFav = showFav;
+window.goHome = goHome;
+window.pickSource = pickSource;
+window.clearSearch = clearSearch;
+window.submitSearch = submitSearch;
+window.onSearchInput = onSearchInput;
+window.runRecent = runRecent;
 
 init();

@@ -63,24 +63,22 @@ if ($r === 'fav') {
 
 // ---------- 页面（单页应用壳） ----------
 $cdn = 'https://cdn.jsdelivr.net/npm';
+$site = e(site_name());
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?php echo e(site_name()); ?></title>
+<title><?php echo $site; ?></title>
 <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
+
 <header class="topbar">
-  <div class="brand" onclick="location.href='index.php'"><?php echo e(site_name()); ?></div>
-  <div class="search-wrap">
-    <input id="search" type="search" placeholder="搜索影视名称…" autocomplete="off">
-    <select id="sourceSel"></select>
-  </div>
+  <div class="brand gradient-text" onclick="location.href='index.php'"><?php echo $site; ?></div>
   <nav class="nav">
-    <a href="index.php?r=home">首页</a>
+    <a href="javascript:goHome()">首页</a>
     <a href="javascript:showFav()">收藏</a>
     <a href="admin.php">后台</a>
   </nav>
@@ -89,9 +87,21 @@ $cdn = 'https://cdn.jsdelivr.net/npm';
 <main id="app">
   <section id="home" class="view">
     <div class="hero">
-      <h1>在线影视聚合搜索</h1>
-      <p>多源实时检索 · 一键播放</p>
+      <h1 class="gradient-text"><?php echo $site; ?></h1>
+      <p>自由观影，畅享精彩 · 多源实时检索，一键播放</p>
     </div>
+
+    <div class="search-center">
+      <div class="search-bar">
+        <input id="search" type="search" placeholder="搜索你喜欢的影视…" autocomplete="off" oninput="onSearchInput(event)">
+        <button id="clearBtn" class="clear-btn" type="button" onclick="clearSearch()" aria-label="清空" style="display:none">✕</button>
+        <button class="search-btn" type="button" onclick="submitSearch()">搜索</button>
+      </div>
+      <div id="recent" class="recent" aria-label="最近搜索"></div>
+    </div>
+
+    <div id="sourcePills" class="pills"></div>
+
     <div id="results" class="grid"></div>
     <div id="loading" class="loading" style="display:none">加载中…</div>
     <div id="pager" class="pager"></div>
@@ -104,7 +114,12 @@ $cdn = 'https://cdn.jsdelivr.net/npm';
   </section>
 </main>
 
-<footer class="foot">纯 PHP 影视聚合 · 数据来自第三方资源接口 · 仅供学习</footer>
+<footer class="foot">
+  <div class="foot-inner">
+    <div class="gradient-text foot-brand"><?php echo $site; ?></div>
+    <p class="disclaimer">免责声明：本站仅为视频搜索工具，不存储、上传或分发任何视频内容。所有视频均来自第三方 API 接口，如有侵权请联系相关内容提供方。请低调自用，勿公开传播。</p>
+  </div>
+</footer>
 
 <script src="<?php echo $cdn; ?>/hls.js@1.5.13/dist/hls.min.js"></script>
 <script src="<?php echo $cdn; ?>/dplayer@1.27.1/dist/DPlayer.min.js"></script>
