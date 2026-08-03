@@ -30,10 +30,32 @@
 
 | 来源 | 地址 | 借鉴了什么 |
 | --- | --- | --- |
-| **LibreSpark/LibreTV** | https://github.com/LibreSpark/LibreTV | 聚合搜索的产品形态（并发请求、超时控制、来源徽章）、m3u8 提取正则、HLS 代理的 token 鉴权 + SSRF 防护思路、DPlayer + HLS.js 播放链路 |
+| **LibreSpark/LibreTV** | https://github.com/LibreSpark/LibreTV | 聚合搜索的产品形态（并发请求、超时控制、来源徽章）、m3u8 提取正则、DPlayer + HLS.js 播放链路；**采集 / 获取视频数据的流程**（搜索与详情 URL、请求头、去重、排序、播放地址解析、m3u8 兜底）已逐条对齐，见 §2.1。HLS 代理仅作思路参考——LPHPTV 用自带增强版（`proxy.php` 带 SSRF 防护），见 §2.1 末尾 |
 | **maccmspro/maccms10**（苹果CMS V10） | https://github.com/maccmspro/maccms10 | V10 资源接口标准（`ac=videolist&wd=` 搜索 / `&ids=` 详情）、`vod_play_from` / `vod_play_url` 的多源、分集（`#` 分集、`$` 分隔"集名$地址"）解析格式、XML/JSON 双格式兼容 |
 
-> 本项目**未直接拷贝**上述仓库代码（它们分别是 Node/JS 与完整 CMS），而是按它们的接口与交互标准用纯 PHP 重写了一遍后端，前端为自研单页。所有视频数据均来自你配置的第资源三方接口。
+> 本项目**未直接拷贝**上述仓库代码（它们分别是 Node/JS 与完整 CMS），而是按它们的接口与交互标准用纯 PHP 重写了一遍后端，前端为自研单页。所有视频数据均来自你配置的第三方资源接口。
+
+### 2.1 采集与「获取视频数据」流程（与 LibreTV 完全对齐）
+
+LPHPTV 后端按 `LibreTV/js/api.js` 的 `searchVideos` 与 `getVideoDetail` 逐条用纯 PHP 重写（PHP 用 `curl_multi` 并发等价于 JS 的 `Promise.all`，**传输层不限定 curl**）。逐环节对照：
+
+| 环节 | LibreTV (`js/api.js`) | LPHPTV (PHP) |
+| --- | --- | --- |
+| 搜索 URL | `api + '?ac=videolist&wd=' + encodeURIComponent(q) + '&pg=N'` | `api + '?ac=videolist&wd=' + rawurlencode(q) + '&pg=N'`（`rawurlencode` ≡ `encodeURIComponent`） |
+| 详情 URL | `api + '?ac=videolist&ids=' + id`（无 `&pg`） | 同左 |
+| 请求头 | `User-Agent: Chrome/122` + `Accept: application/json` | 同（`http_get` / `multi_get` 默认带） |
+| 超时 | 搜索 8000ms / 详情 10000ms | 搜索 8000ms（`curl_multi`）/ 详情 10000ms |
+| 并发 | `Promise.all` 并发打多源 | `curl_multi_init` 并发 |
+| 失败隔离 | 单源失败返回空，不影响其它源 | 同（单源失败返回空，照常出其它源结果） |
+| 去重 | 键 `${source}_${vod_id}`，不同源同一影片分别保留（便于切源） | 键 `源ID_视频ID`，同 |
+| 排序 | 按 `vod_name` → `source_name`（`localeCompare`） | 同（`strcmp` 名称 → 来源） |
+| 播放地址解析 | `vod_play_url.split('$$$')` → 每源 `split('#')` → `ep.split('$')[1]` 取 URL → 过滤 `http(s)` | 同（`parse_play`：`$$$` 分源 / `#` 分集 / `$` 取索引 1 为地址，过滤 `http(s)`） |
+| m3u8 兜底 | `episodes` 为空且 `vod_content` 含裸 `.m3u8` → 正则 `/\$(https?:\/\/[^"'\s]+?\.m3u8)/g` 提取 | 同（`vod_detail` 中若无任何播放地址则扫 `vod_content` 提取） |
+| 默认播放 | 首个源的首集 | 同（首源首集） |
+
+> **关于多源**：LibreTV 详情默认只取 `playSources[0]`（第一个播放源）；LPHPTV 解析**全部 `$$$` 源**并支持前端切换，是 LibreTV 该行为的**超集**，默认播放仍是首源首集，体验一致。如需严格只取首源，改 `inc/vodapi.php` 的 `parse_play` 即可。
+
+> **关于代理**：`proxy.php` 是 LPHPTV **自研增强版**，比 LibreTV 的 `server.mjs` 代理多了 **SSRF 防护**（仅放行公网 `http/https`，屏蔽内网）。LibreTV 代理无 SSRF，且其 token 为 `sha256(password)`（前端可推导，较弱），故 LPHPTV 改用「随机 token + 同源 Referer/Origin 校验」。播放链路（DPlayer + HLS.js）则与 LibreTV 一致。
 
 ---
 
