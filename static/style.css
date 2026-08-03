@@ -11,7 +11,7 @@ a { color:var(--text); text-decoration:none; }
 }
 
 /* 顶栏 */
-.topbar { display:flex; align-items:center; gap:16px; padding:12px 22px; background:rgba(23,26,33,.85); backdrop-filter:blur(8px); position:sticky; top:0; z-index:10; border-bottom:1px solid #000; }
+.topbar { display:flex; align-items:center; gap:16px; padding:12px 64px; background:rgba(23,26,33,.85); backdrop-filter:blur(8px); position:sticky; top:0; z-index:10; border-bottom:1px solid #000; }
 .brand { font-size:22px; font-weight:800; cursor:pointer; white-space:nowrap; }
 .nav { margin-left:auto; display:flex; gap:16px; font-size:14px; color:var(--muted); }
 .nav a:hover { color:var(--text); }
