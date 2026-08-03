@@ -88,6 +88,7 @@ main { max-width:1200px; margin:0 auto; padding:20px; }
 .card:hover .poster img { transform:scale(1.06); }
 .no-pic { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#555; font-size:13px; }
 .badge { position:absolute; left:6px; top:6px; background:rgba(0,0,0,.55); color:#fff; font-size:11px; padding:2px 7px; border-radius:5px; max-width:70%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.badge.multi { left:auto; right:6px; top:6px; background:rgba(229,9,20,.85); font-weight:600; }
 .remark { position:absolute; right:6px; bottom:6px; background:var(--accent); color:#fff; font-size:11px; padding:2px 7px; border-radius:5px; }
 .pgrad { position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,.45), transparent 45%); pointer-events:none; }
 .title { margin-top:8px; font-size:14px; line-height:1.35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -114,6 +115,10 @@ main { max-width:1200px; margin:0 auto; padding:20px; }
 .src-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
 .tab { padding:6px 14px; border-radius:20px; border:1px solid #2a2f3a; background:var(--panel2); color:var(--text); cursor:pointer; font-size:13px; }
 .tab.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+.src-switch { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+.src-switch .lbl { color:var(--muted); font-size:13px; }
+.src-switch .ss { padding:6px 14px; border-radius:20px; border:1px solid #2a2f3a; background:var(--panel2); color:var(--text); cursor:pointer; font-size:13px; }
+.src-switch .ss.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 .episodes { display:grid; grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:8px; }
 .ep { padding:8px 6px; border-radius:6px; border:1px solid #2a2f3a; background:var(--panel2); color:var(--text); cursor:pointer; font-size:13px; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ep.active { background:var(--accent); border-color:var(--accent); color:#fff; }

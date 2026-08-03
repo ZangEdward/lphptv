@@ -132,28 +132,39 @@ function cardHtml(it) {
     const safeName = esc(it.name);
     const sourceInfo = it.source_name
         ? `<span class="badge">${esc(it.source_name)}</span>` : '';
+    // 跨源合并：同剧多源时显示源数量徽标
+    const multi = (it.sources && it.sources.length > 1)
+        ? `<span class="badge multi" title="来自多个源，可在详情里切换">${it.sources.length}源</span>` : '';
     const remark = it.remarks ? `<span class="remark">${esc(it.remarks)}</span>` : '';
     const pic = it.pic
         ? `<img loading="lazy" src="${esc(it.pic)}" alt="${safeName}" onerror="imgFallback(this)">`
         : '<div class="no-pic">无封面</div>';
     const meta = [it.type, it.year, it.area].filter(Boolean).map(esc).join(' · ');
-    return `<div class="card" onclick="openDetail(${it.source},'${safeId}')">
-        <div class="poster">${pic}${sourceInfo}${remark}<div class="pgrad"></div></div>
+    // 把同剧的所有源（source,id）序列化成 data 属性，供点击时带入详情切换器
+    const srcData = (it.sources && it.sources.length)
+        ? encodeURIComponent(JSON.stringify(it.sources))
+        : encodeURIComponent(JSON.stringify([{ source: it.source, id: it.id, source_name: it.source_name }]));
+    return `<div class="card" onclick="openDetail(${it.source},'${safeId}','${srcData}')">
+        <div class="poster">${pic}${sourceInfo}${multi}${remark}<div class="pgrad"></div></div>
         <div class="title">${safeName}</div>
         ${meta ? `<div class="meta">${meta}</div>` : ''}
     </div>`;
 }
 
 /* ---------- 详情弹窗（学习 LibreTV #modal） ---------- */
-async function openDetail(source, id) {
+async function openDetail(source, id, srcData) {
     const m = document.getElementById('modal');
     const c = document.getElementById('modalContent');
     c.innerHTML = '<div class="loading">加载详情…</div>';
     m.classList.add('show');
     document.body.style.overflow = 'hidden';
+    let sources = [];
+    try { sources = JSON.parse(decodeURIComponent(srcData || '')) || []; } catch (e) { sources = []; }
+    if (!sources.length) sources = [{ source: source, id: id }];
     try {
         const d = await api(`api_detail&s=${source}&id=${encodeURIComponent(id)}`);
         if (d.error) { c.innerHTML = '<div class="empty">' + esc(d.error) + '</div>'; return; }
+        d._sources = sources; // 携带同剧多源，供源切换器使用
         renderDetail(d);
         history.replaceState(null, '', `index.php?s=${source}&id=${encodeURIComponent(id)}`);
     } catch (e) {
@@ -178,6 +189,17 @@ function renderDetail(d) {
         tabs = play.map((p, i) => `<button class="tab ${i===0?'active':''}" data-i="${i}" onclick="switchSrc(${i})">${esc(p.name)}</button>`).join('');
     }
     const meta = [d.type, d.year, d.area].filter(Boolean).map(esc).join(' · ');
+    // 同剧多源切换器（跨源）：与单源内的播放源分组(src-tabs)区分
+    const sources = d._sources || [];
+    let srcSwitch = '';
+    if (sources.length > 1) {
+        const cur = (d.source != null && d.id != null) ? (d.source + '_' + d.id) : '';
+        srcSwitch = '<div class="src-switch"><span class="lbl">源：</span>' + sources.map((s, i) => {
+            const key = s.source + '_' + s.id;
+            const active = key === cur ? ' active' : '';
+            return `<button class="ss ${active}" data-i="${i}" onclick="switchSource(${i})">${esc(s.source_name || ('源'+(i+1)))}</button>`;
+        }).join('') + '</div>';
+    }
     c.innerHTML = `
       <div class="detail-head">
         <div class="d-poster">${d.pic?`<img src="${esc(d.pic)}" onerror="imgFallback(this)">`:''}</div>
@@ -190,11 +212,31 @@ function renderDetail(d) {
           <button class="btn" onclick="addFav(${d.source},'${encodeURIComponent(d.id)}','${encodeURIComponent(d.name)}','${encodeURIComponent(d.pic||'')}')">★ 收藏</button>
         </div>
       </div>
+      ${srcSwitch}
       <div class="player" id="player"></div>
       <div class="src-tabs" id="srcTabs">${tabs}</div>
       <div class="episodes" id="episodes"></div>
     `;
     if (play.length) switchSrc(0);
+}
+
+// 跨源切换：同剧在不同源里重新拉取详情并替换当前弹窗内容
+async function switchSource(i) {
+    const d = window._detailData;
+    if (!d || !d._sources || !d._sources[i]) return;
+    const s = d._sources[i];
+    const c = document.getElementById('modalContent');
+    c.innerHTML = '<div class="loading">加载其它源…</div>';
+    if (_dp) { try { _dp.destroy(); } catch (e) {} _dp = null; }
+    try {
+        const nd = await api(`api_detail&s=${s.source}&id=${encodeURIComponent(s.id)}`);
+        if (nd.error) { c.innerHTML = '<div class="empty">' + esc(nd.error) + '</div>'; return; }
+        nd._sources = d._sources;
+        window._detailData = nd;
+        renderDetail(nd);
+    } catch (e) {
+        c.innerHTML = '<div class="empty">其它源详情加载失败：' + esc(e.message) + '</div>';
+    }
 }
 
 let _dp = null;

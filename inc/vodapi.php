@@ -93,8 +93,8 @@ function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
     $timeout = (int)cfg_get('search_timeout', 8);  // 与 LibreTV AGGREGATED_SEARCH_CONFIG.timeout=8000 一致
     $resps = multi_get($reqs, $timeout);
 
-    $results = [];
-    $seen = [];
+    $grouped = [];     // 归一化剧名 => 代表卡片（含 sources 多源列表）
+    $pairSeen = [];    // 源+视频ID 去重（防单源内重复计入）
     $srcStat = [];
     foreach ($resps as $key => $r) {
         $s = $srcMap[$key];
@@ -105,13 +105,20 @@ function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
         foreach ($parsed['list'] as $raw) {
             $item = normalize_item($raw, $s['id'], $s['name']);
             if (!$item) continue;
-            // 去重键 = 源 + 视频ID（与 LibreTV 一致：不同源的同一影片分别保留）
-            $dk = $s['id'] . '_' . $item['id'];
-            if (isset($seen[$dk])) continue;
-            $seen[$dk] = true;
-            $results[] = $item;
+            $pair = $s['id'] . '_' . $item['id'];
+            if (isset($pairSeen[$pair])) continue;
+            $pairSeen[$pair] = true;
+            // 按归一化剧名分组：同剧来自不同源只出一卡，源列表留在 sources 里供前端切换
+            $tk = normalize_title($item['name']);
+            if (!isset($grouped[$tk])) {
+                $item['sources'] = [['source' => $s['id'], 'id' => $item['id'], 'source_name' => $s['name']]];
+                $grouped[$tk] = $item;
+            } else {
+                $grouped[$tk]['sources'][] = ['source' => $s['id'], 'id' => $item['id'], 'source_name' => $s['name']];
+            }
         }
     }
+    $results = array_values($grouped);
 
     // 成人开关关闭时，在结果层面过滤成人视频（与 LibreTV 黄色内容过滤一致）
     if (cfg_get('show_adult') !== '1') {
@@ -120,10 +127,9 @@ function vod_search($q, $sourceId = 'all', $page = 1, $useCache = true) {
         }));
     }
 
-    // 排序：先按名称、再按来源（与 LibreTV 一致）
+    // 排序：按名称（与 LibreTV 一致；同剧已合并为一张卡，无需来源次级排序）
     usort($results, function ($a, $b) {
-        $c = strcmp($a['name'], $b['name']);
-        return $c !== 0 ? $c : strcmp($a['source_name'], $b['source_name']);
+        return strcmp($a['name'], $b['name']);
     });
 
     // 结果上限：49 源全开时体量很大，给个上限防止响应过大（LibreTV 有 maxResults 同理）
@@ -213,8 +219,21 @@ function detect_adult_sources() {
     return $marked;
 }
 
+/**
+ * 归一化剧名用于跨源合并：去掉年份/季集/分辨率/更新标记等噪点，小写去空格。
+ * 让「同一部剧在不同源里的不同标题写法」尽量落到同一个键，从而首页只出一卡。
+ */
+function normalize_title($name) {
+    $n = (string)($name ?? '');
+    $n = preg_replace('/[\[\]【】()（）\s]/u', '', $n);
+    $n = preg_replace('/[19|20]\d{2}/', '', $n);                              // 年份
+    $n = preg_replace('/(第)?\d+(\.\d+)?(季|部|集|话|期)/u', '', $n);          // 第N季/部/集
+    $n = preg_replace('/(HD|BD|4K|1080P|720P|全\d+集|更新至\d+集|完结)/i', '', $n); // 画质/集数标记
+    $n = preg_replace('/[^\p{Han}A-Za-z0-9]/u', '', $n);                     // 仅留中英文数字
+    return strtolower($n);
+}
+
 function normalize_item($raw, $sourceId, $sourceName) {
-    if (empty($raw['vod_name'])) return null;
     return [
         'source'      => (int)$sourceId,
         'source_name' => $sourceName,
